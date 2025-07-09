@@ -1,0 +1,159 @@
+services:
+  # --------------------
+  # Application Services
+  # --------------------
+  app:
+    image: benitorhuang/platform_sql:0.0.1
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - .:/app
+    ports:
+      - "${API_EXPOSE_PORT:-8000}:8000"
+    networks:
+      - crawler_net
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+    command: ["python", "-m", "uvicorn", "crawler.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    mem_limit: 2g
+
+  worker-default:
+    image: benitorhuang/platform_sql:0.0.1
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - .:/app
+    networks:
+      - crawler_net
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    command: >
+      python -m celery -A crawler.app worker -l debug 
+      -n default_worker@%h 
+      -Q default 
+      -c ${CELERY_DEFAULT_WORKER_CONCURRENCY:-2}
+
+  worker-category:
+    image: benitorhuang/platform_sql:0.0.1
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - .:/app
+    networks:
+      - crawler_net
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    command: >
+      python -m celery -A crawler.app worker -l debug 
+      -n category_worker@%h 
+      -Q category_queue 
+      -c ${CELERY_CATEGORY_WORKER_CONCURRENCY:-1}
+
+
+  flower:
+    image: benitorhuang/platform_sql:0.0.1
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "${FLOWER_EXPOSE_PORT:-5555}:5555"
+    networks:
+      - crawler_net
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    command: >
+      python -m celery -A crawler.app flower
+      --address=0.0.0.0
+      --port=5555
+      --broker=amqp://${RABBITMQ_DEFAULT_USER:-guest}:${RABBITMQ_DEFAULT_PASS:-guest}@rabbitmq:5672//
+
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_password}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    ports:
+      - "${MYSQL_EXPOSE_PORT:-3306}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - crawler_net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u${MYSQL_USER}", "-p${MYSQL_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7.2-alpine
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - redis_data:/data
+    networks:
+      - crawler_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    restart: unless-stopped
+    hostname: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-guest}
+    ports:
+      - "5672:5672"
+      - "${RABBITMQ_MGMT_EXPOSE_PORT:-15672}:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq/
+    networks:
+      - crawler_net
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_running", "-q"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    restart: unless-stopped
+    ports:
+      - "${PHPMYADMIN_EXPOSE_PORT:-8080}:80"
+    environment:
+      PMA_HOST: mysql
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_password}
+    networks:
+      - crawler_net
+    depends_on:
+      - mysql
+
+networks:
+  crawler_net:
+    driver: bridge
+
+volumes:
+  mysql_data:
+  redis_data:
+  rabbitmq_data:
