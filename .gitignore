@@ -1,0 +1,41 @@
+# .gitignore
+
+# --- 敏感配置 ---
+# 永遠不要將包含密鑰和密碼的 .env 文件提交到版本庫
+.env
+
+# --- Python 相關 ---
+# 字節碼和緩存文件
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 虛擬環境
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+
+# --- IDE 和編輯器配置 ---
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# --- 數據和日誌文件 ---
+# 運行時生成的數據、快取和日誌
+/data/
+*.log
+*.log.*
+logs/
+
+# --- 其他 ---
+# 操作系統生成的文件
+.DS_Store
+Thumbs.db
+
+# Directories to ignore as requested by user
+demo/
+structure/
