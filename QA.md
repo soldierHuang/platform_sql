@@ -32,3 +32,26 @@
 
 解決方案的有效性：
 所有平台在經過完整的抓取、解析和存儲流程後，數據均能正確地寫入 `tb_jobs` 表，證明之前針對各平台解析問題的修正均已生效。這也驗證了整個爬蟲框架的穩定性和數據處理的正確性。
+
+---
+
+問題描述：Q-007
+使用 `docker stack deploy` 部署 Docker Swarm 服務後，無法從主機的網頁瀏覽器訪問任何已發布 (published) 的服務端口。
+
+解決方案：
+1. **初步診斷：** 嘗試執行 `docker stack rm` 等 Swarm 管理指令，但收到 `Cannot connect to the Docker daemon` 錯誤，顯示問題比預期的網路設定更底層。
+2. **根本原因分析：** 透過 `systemctl status docker.service` 指令檢查 Docker 服務狀態，發現其狀態為 `failed`，證實 Docker daemon 服務本身沒有在主機上成功運行。
+3. **修復 Docker Daemon：**
+   - 透過 `journalctl -u docker.service` 查看詳細日誌，推斷問題可能來自損壞的設定檔。
+   - 將位於 `/etc/docker/daemon.json` 的設定檔改名備份 (`sudo mv /etc/docker/daemon.json /etc/docker/daemon.json.bak`)，讓 Docker 可以使用預設值啟動。
+   - 執行 `sudo systemctl restart docker.service`，成功使 Docker 服務恢復到 `active (running)` 狀態。
+4. **重建 Swarm 環境：**
+   - 在 Docker 服務正常後，執行 `docker swarm leave --force` 清理舊的 Swarm 狀態。
+   - 執行 `docker swarm init --advertise-addr <IP_ADDRESS>` 重新初始化 Swarm。
+   - 執行 `docker stack deploy -c docker_stack.yml crawler_main_stack` 重新部署服務。
+
+問題根源：
+真正的問題根源並非 Docker Swarm 的網路或 `docker_stack.yml` 的配置錯誤，而是**主機上的 Docker daemon 服務因設定檔損壞而無法啟動**。這導致所有 Docker 指令都無法執行，服務自然也無法正常運行和對外提供。
+
+解決方案的有效性：
+此解決方案非常有效。透過優先修復底層的 Docker daemon 服務，讓 Docker 環境恢復健康，後續的 Swarm 初始化和服務部署得以順利完成。最終，所有服務都能透過指定的 IP 和端口從瀏覽器正常訪問，問題被徹底解決。

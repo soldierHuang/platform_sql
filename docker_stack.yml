@@ -1,0 +1,226 @@
+# docker_stack.yml
+version: '3.8' # Docker Swarm Mode 推薦使用 3.x 版本
+
+services:
+  # --------------------
+  # Application Services
+  # --------------------
+  app:
+    image: benitorhuang/platform_sql:0.0.1
+    env_file: .env
+    volumes:
+      - .:/app
+    ports:
+      - target: 8000
+        published: ${API_EXPOSE_PORT:-8000}
+        protocol: tcp
+        mode: ingress # 啟用 Swarm 內置的負載均衡
+    networks:
+      - crawler_net
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager # 將服務部署到 Manager 節點 (如果有多節點Swarm)
+      resources:
+        limits:
+          memory: 2g
+        reservations:
+          memory: 512m # 確保至少保留 512MB 內存
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+    command: ["python", "-m", "uvicorn", "crawler.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+  worker-default:
+    image: benitorhuang/platform_sql:0.0.1
+    env_file: .env
+    volumes:
+      - .:/app
+    networks:
+      - crawler_net
+    deploy:
+      replicas: ${CELERY_DEFAULT_WORKER_REPLICAS:-2}
+      resources:
+        limits:
+          memory: 1g
+        reservations:
+          memory: 256m
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+    command: >
+      python -m celery -A crawler.app worker -l info # 將 debug 改為 info，減少日誌量
+      -n default_worker@%h 
+      -Q default 
+      -c ${CELERY_DEFAULT_WORKER_CONCURRENCY:-2}
+
+  worker-category:
+    image: benitorhuang/platform_sql:0.0.1
+    env_file: .env
+    volumes:
+      - .:/app
+    networks:
+      - crawler_net
+    deploy:
+      replicas: ${CELERY_CATEGORY_WORKER_REPLICAS:-1}
+      resources:
+        limits:
+          memory: 512m
+        reservations:
+          memory: 128m
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+    command: >
+      python -m celery -A crawler.app worker -l info
+      -n category_worker@%h 
+      -Q category_queue 
+      -c ${CELERY_CATEGORY_WORKER_CONCURRENCY:-1}
+
+  flower:
+    image: benitorhuang/platform_sql:0.0.1
+    env_file: .env
+    ports:
+      - target: 5555
+        published: ${FLOWER_EXPOSE_PORT:-5555}
+        protocol: tcp
+        mode: ingress
+    networks:
+      - crawler_net
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    command: >
+      python -m celery -A crawler.app flower
+      --address=0.0.0.0
+      --port=5555
+      --broker=amqp://${RABBITMQ_DEFAULT_USER:-guest}:${RABBITMQ_DEFAULT_PASS:-guest}@rabbitmq:5672//
+
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_password}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    ports:
+      - target: 3306
+        published: ${MYSQL_EXPOSE_PORT:-3306}
+        protocol: tcp
+        mode: ingress
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - crawler_net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u${MYSQL_USER}", "-p${MYSQL_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager # 確保 MySQL 跑在 Manager 節點上，避免數據丟失
+      restart_policy:
+        condition: on-failure
+
+  redis:
+    image: redis:7.2-alpine
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - redis_data:/data
+    networks:
+      - crawler_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    hostname: rabbitmq # 固定 hostname 方便外部 Airflow 連接
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-guest}
+    ports:
+      - target: 5672
+        published: 5672
+        protocol: tcp
+        mode: ingress
+      - target: 15672
+        published: ${RABBITMQ_MGMT_EXPOSE_PORT:-15672}
+        protocol: tcp
+        mode: ingress
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq/
+    networks:
+      - crawler_net
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_running", "-q"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    ports:
+      - target: 80
+        published: ${PHPMYADMIN_EXPOSE_PORT:-8080}
+        protocol: tcp
+        mode: ingress
+    environment:
+      PMA_HOST: mysql
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_password}
+    networks:
+      - crawler_net
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+  portainer:
+    image: portainer/portainer-ce:latest
+    command: -H unix:///var/run/docker.sock --tlsskipverify
+    ports:
+      - target: 9000
+        published: ${PORTAINER_EXPOSE_PORT:-9000}
+        protocol: tcp
+        mode: ingress
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    networks:
+      - crawler_net
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: on-failure
+
+networks:
+  crawler_net:
+    driver: overlay
+    attachable: true
+
+volumes:
+  mysql_data:
+  redis_data:
+  rabbitmq_data:
+  portainer_data:

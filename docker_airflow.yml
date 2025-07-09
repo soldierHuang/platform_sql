@@ -1,0 +1,132 @@
+# docker_airflow.yml
+version: '3.8'
+
+services:
+  # Airflow Webserver
+  airflow-webserver:
+    image: apache/airflow:2.8.4
+    restart: on-failure
+    environment:
+      AIRFLOW_HOME: /opt/airflow
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres/airflow
+      AIRFLOW__WEBSERVER__RBAC: "True"
+      # [調整] DAGs Folder 指向容器內掛載的實際 DAG 文件路徑
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags/src/dataflow/dags 
+      _PIP_ADDITIONAL_REQUIREMENTS: "apache-airflow-providers-mysql apache-airflow-providers-cncf-kubernetes"
+    ports:
+      - target: 8080
+        published: ${AIRFLOW_WEBSERVER_PORT:-8080}
+        protocol: tcp
+        mode: ingress
+    volumes:
+      # [調整] 將本地的 `src` 目錄掛載到容器內的 `/opt/airflow/dags/src`
+      # 這樣 /opt/airflow/dags/src/dataflow/dags 就會包含你的 DAG 文件
+      - ./src:/opt/airflow/dags/src 
+      - ${AIRFLOW_LOGS_FOLDER_HOST:-./logs}:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+      - ./crawler:/app/crawler
+      - ./requirements.txt:/app/requirements.txt
+    networks:
+      - airflow_internal_net
+      - crawler_net
+    command: webserver
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      replicas: 1
+
+  # Airflow Scheduler
+  airflow-scheduler:
+    image: apache/airflow:2.8.4
+    restart: on-failure
+    environment:
+      AIRFLOW_HOME: /opt/airflow
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres/airflow
+      # [調整] DAGs Folder
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags/src/dataflow/dags
+    volumes:
+      # [調整]
+      - ./src:/opt/airflow/dags/src 
+      - ${AIRFLOW_LOGS_FOLDER_HOST:-./logs}:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+      - ./crawler:/app/crawler
+      - ./requirements.txt:/app/requirements.txt
+    networks:
+      - airflow_internal_net
+      - crawler_net
+    command: scheduler
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      replicas: 1
+
+  # Airflow Worker
+  airflow-worker:
+    image: apache/airflow:2.8.4
+    restart: on-failure
+    environment:
+      AIRFLOW_HOME: /opt/airflow
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres/airflow
+      # [調整] DAGs Folder
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags/src/dataflow/dags
+      RABBITMQ_HOST: rabbitmq
+      REDIS_HOST: redis
+      MYSQL_HOST: mysql
+    volumes:
+      # [調整]
+      - ./src:/opt/airflow/dags/src 
+      - ${AIRFLOW_LOGS_FOLDER_HOST:-./logs}:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+      - ./crawler:/app/crawler
+      - ./requirements.txt:/app/requirements.txt
+    networks:
+      - airflow_internal_net
+      - crawler_net
+    command: >
+      bash -c "pip install --no-cache-dir -r /app/requirements.txt && airflow worker"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      replicas: 1
+
+  # Airflow Postgres Database
+  airflow-postgres:
+    image: postgres:13
+    restart: on-failure
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - airflow_postgres_data:/var/lib/postgresql/data
+    networks:
+      - airflow_internal_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow -d airflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    deploy:
+      replicas: 1
+
+networks:
+  airflow_internal_net:
+    driver: overlay
+    attachable: true
+  crawler_net:
+    external: true
+
+volumes:
+  airflow_postgres_data:

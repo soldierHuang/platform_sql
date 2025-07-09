@@ -1,4 +1,4 @@
-# Dockerfile (Simplified, Playwright Removed)
+# Dockerfile 
 # Multi-stage build to create a secure, lightweight, and efficient production image.
 
 # ---- Stage 1: Builder ----
