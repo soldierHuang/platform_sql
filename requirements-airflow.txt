@@ -1,0 +1,14 @@
+# requirements-airflow.txt
+# Airflow Providers
+apache-airflow-providers-celery
+apache-airflow-providers-mysql
+apache-airflow-providers-cncf-kubernetes
+
+# Celery Broker/Backend
+redis
+
+# PostgreSQL Client
+psycopg2-binary
+
+# Celery Monitoring
+flower

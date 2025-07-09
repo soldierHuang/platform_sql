@@ -1,0 +1,40 @@
+sequenceDiagram
+    participant User
+    participant web_url as  URL 網址 or API
+    participant JobCat as 搜尋類別
+    participant Search as 職缺列表
+    participant Job_detail as 職缺個別資訊
+    participant database as 檔案 / 資料庫
+    
+
+    Note over User: 設定搜尋條件與範圍
+
+    User->>web_url: 網站搜尋
+
+
+    Note over web_url: 1. 篩選 (關鍵字、職業類別)  <br/> def catch_url
+    loop 每次執行
+        web_url->>JobCat: 獲取關鍵字 / 職業類別資訊
+        JobCat-->>web_url: 返回搜尋網址
+    end
+    
+    
+    Note over web_url: 2. 排序 (最新日期、最相關)
+    loop 每頁職缺 (最多 10 頁)
+        web_url->>Search: 獲取職缺列表
+        Search-->>web_url: 收集職缺網址 , 返回職缺連結 <br/>  使用 SET () 篩選唯一值
+        Note over web_url: 儲存職缺 URL  列表
+    end
+
+    
+    Note over web_url: 3. 獲取職缺詳細資訊
+    loop 連結每個職缺
+        web_url->>Job_detail: 使用職缺網址 取出相關資料
+        Job_detail-->>web_url: 返回職缺 JSON 資料
+        Note over web_url: 儲存職缺個別資料
+    end
+    
+
+
+    web_url->>database: 轉換為 DataFrame 格式，輸出職缺資料
+    Note over database: 將職缺資料輸出為 CSV 檔案 <br/> 或 儲存至資料庫

@@ -113,6 +113,8 @@ sudo systemctl restart docker.service
 
 ### 2. 網路連線問題
 如果服務已啟動，但瀏覽器無法訪問，請檢查網路和防火牆。
+<!-- ifconfig -->
+<!-- ip a -->
 
 ```bash
 # 查看防火牆狀態 (確認端口是否被阻擋)

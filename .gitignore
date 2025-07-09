@@ -12,11 +12,13 @@ __pycache__/
 
 # 虛擬環境
 .venv/
+.python-version
 venv/
 ENV/
 env/
 env.bak/
 venv.bak/
+
 
 # --- IDE 和編輯器配置 ---
 .vscode/
@@ -35,7 +37,10 @@ logs/
 # 操作系統生成的文件
 .DS_Store
 Thumbs.db
+GEMINI.md
+
 
 # Directories to ignore as requested by user
 demo/
 structure/
+

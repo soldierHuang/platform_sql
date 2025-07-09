@@ -1,0 +1,130 @@
+flowchart TB
+    %% Title (Mermaid 目前不支持 title 標籤，故以注釋表示)
+    %% 多平台職缺爬蟲數據管道 - 資料流視覺化
+
+    %% Actors
+    subgraph Actors
+        CLI_User["管理員/開發者 CLI"]
+        Web_User["用戶/前端應用"]
+    end
+
+    %% External Sources
+    subgraph ExternalSources["外部資料來源 Web/API"]
+        P104["104人力銀行"]
+        P1111["1111人力銀行"]
+        PCake["Cakeresume"]
+        PYes123["Yes123求職網"]
+    end
+
+    %% Service Layer
+    subgraph ServiceLayer["服務層"]
+        FastAPI["FastAPI Web API"]
+        subgraph FastAPI_Files
+            FastAPI_Main["main.py"]
+            API_Deps["api/dependencies.py"]
+        end
+
+        CeleryApp["Celery App"]
+        subgraph CeleryApp_Files
+            Celery_App["app.py"]
+            Platform_Tasks["tasks.py 各平台"]
+        end
+
+        RabbitMQ["RabbitMQ Broker"]
+        note_RabbitMQ["任務隊列 default, category_queue"]
+
+        WorkerDefault["Celery Worker default"]
+        note_WorkerDefault["處理一般爬取任務"]
+
+        WorkerCategory["Celery Worker category_queue"]
+        note_WorkerCategory["處理分類同步任務 高優先級"]
+
+        Orchestrator["Crawler Orchestrator"]
+        subgraph Orchestrator_Files
+            Orchestrator_Core["core/orchestrator.py"]
+            Protocols["core/protocols.py"]
+            Factory["factory.py"]
+            Settings["settings.py"]
+            Utils["utils.py"]
+            Strategies["projects/**/strategies.py"]
+            Parsers["projects/**/parsers.py"]
+        end
+    end
+
+    %% Data Layer
+    subgraph DataLayer["數據層"]
+        Redis["Redis 暫存/快取"]
+        note_Redis["暫存 UrlFetcher 原始資料，爬取失敗 URL 快照"]
+        Redis_Cache["cache.py"]
+
+        MySQL["MySQL 持久化資料"]
+        note_MySQL["儲存 CategorySource, Url, Job"]
+        DB_Conn["database/connection.py"]
+        DB_Repo["database/repository.py"]
+        DB_Schema["database/schema.py"]
+    end
+
+    %% Monitoring and Management
+    subgraph Monitoring["監控與管理"]
+        Flower["Flower Celery 監控"]
+        RabbitMQMgmt["RabbitMQ Mgmt UI"]
+        PhpMyAdmin["phpMyAdmin"]
+    end
+
+    %% Scheduling Layer
+    subgraph Scheduling["排程層"]
+        Airflow["Airflow DAGs"]
+        Airflow_DAG["src/dataflow/dags/crawler_pipeline.py"]
+        Airflow_ETL["src/dataflow/etl/crawler.py"]
+    end
+
+    %% Positioning (hidden edges for layout)
+    CLI_User --- Web_User
+    CLI_User --- FastAPI
+
+    %% User interactions
+    CLI_User -->|1. DB 初始化 crawler db init| MySQL
+    CLI_User -->|2. 手動觸發 Celery Task cli task| CeleryApp
+    CLI_User -->|3. 手動執行爬蟲流程 cli debug-url| Orchestrator
+
+    Web_User -->|訪問 API 查詢數據| FastAPI
+
+    %% Airflow triggers Celery
+    Airflow -->|觸發 Celery Task via _trigger_celery_task| CeleryApp
+
+    %% CeleryApp sends tasks to RabbitMQ
+    CeleryApp -->|發送任務 依 task_routes| RabbitMQ
+    RabbitMQ -.->|處理 default 隊列任務| WorkerDefault
+    RabbitMQ -.->|處理 category_queue 隊列任務| WorkerCategory
+
+    %% Workers execute pipelines
+    WorkerDefault -->|執行 URL/Details Pipeline| Orchestrator
+    WorkerCategory -->|執行 Category Pipeline| Orchestrator
+
+    %% Orchestrator fetches data from external sources
+    Orchestrator -->|UrlFetcher 請求列表詳情數據| ExternalSources
+    ExternalSources -->|返回原始資料 JSON/HTML| Orchestrator
+
+    %% Orchestrator stores and reads cache
+    Orchestrator -->|UrlPipeline 儲存原始資料 Item JSON| Redis
+    Orchestrator ---|>DetailPipeline 讀取原始資料 Item| Redis
+
+    %% Orchestrator updates MySQL
+    Orchestrator -->|repository.upsert_jobs 儲存標準化 Job 資料| MySQL
+    Orchestrator -->|repository.upsert_urls 儲存更新 Url 狀態| MySQL
+    Orchestrator -->|repository.sync_source_categories 同步分類資料| MySQL
+
+    %% FastAPI queries MySQL
+    FastAPI -->|查詢職缺數據 Jobs URLs| MySQL
+
+    %% Monitoring tools interactions
+    Flower -->|監控 Celery Worker 及任務狀態| RabbitMQ
+    RabbitMQMgmt -->|管理 RabbitMQ 實例| RabbitMQ
+    PhpMyAdmin -->|管理 MySQL 資料庫| MySQL
+
+    %% Notes positioning
+    RabbitMQ --- note_RabbitMQ
+    WorkerDefault --- note_WorkerDefault
+    WorkerCategory --- note_WorkerCategory
+    Redis --- note_Redis
+    MySQL --- note_MySQL
