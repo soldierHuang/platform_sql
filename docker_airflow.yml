@@ -12,8 +12,8 @@ services:
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres/airflow
       AIRFLOW__WEBSERVER__RBAC: "True"
       # [修正] DAGS_FOLDER 指向專案安裝後的 dags 目錄
-      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/project/src/dataflow/dags
-      PYTHONPATH: /opt/airflow/project
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/src/dataflow/dags
+      PYTHONPATH: /opt/airflow
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "True" # 建議新 DAG 默認暫停
       AIRFLOW__CELERY__BROKER_URL: "amqp://${RABBITMQ_DEFAULT_USER:-guest}:${RABBITMQ_DEFAULT_PASS:-guest}@rabbitmq:5672/"
       AIRFLOW__CELERY__RESULT_BACKEND: "db+mysql+pymysql://${MYSQL_USER:-user}:${MYSQL_PASSWORD:-password}@mysql:3306/${MYSQL_DATABASE:-job_data}"
@@ -25,7 +25,6 @@ services:
         protocol: tcp
         mode: ingress
     volumes:
-      - ./src:/opt/airflow/project/src
       - ${AIRFLOW_LOGS_FOLDER_HOST:-./logs}:/opt/airflow/logs
       - ./plugins:/opt/airflow/plugins
     networks:
@@ -48,11 +47,10 @@ services:
       AIRFLOW_HOME: /opt/airflow
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres/airflow
-      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/project/src/dataflow/dags
-      PYTHONPATH: /opt/airflow/project
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/src/dataflow/dags
+      PYTHONPATH: /opt/airflow
       
     volumes:
-      - ./src:/opt/airflow/project/src
       - ${AIRFLOW_LOGS_FOLDER_HOST:-./logs}:/opt/airflow/logs
       - ./plugins:/opt/airflow/plugins
     networks:

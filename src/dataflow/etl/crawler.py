@@ -5,6 +5,8 @@ import logging
 from enum import Enum
 from typing import TYPE_CHECKING, List, Optional
 
+from crawler.enums import SourcePlatform
+
 from airflow.operators.python import PythonOperator
 
 
