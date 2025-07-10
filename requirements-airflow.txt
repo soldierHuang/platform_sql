@@ -1,14 +1,9 @@
 # requirements-airflow.txt
-# Airflow Providers
+
+# 基礎 Airflow 版本
+apache-airflow==2.8.4
+
+# [修正] 顯式聲明所有需要的 Provider 包
 apache-airflow-providers-celery
+apache-airflow-providers-postgres
 apache-airflow-providers-mysql
-apache-airflow-providers-cncf-kubernetes
-
-# Celery Broker/Backend
-redis
-
-# PostgreSQL Client
-psycopg2-binary
-
-# Celery Monitoring
-flower

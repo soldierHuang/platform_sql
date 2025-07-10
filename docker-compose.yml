@@ -159,7 +159,8 @@ services:
 
 networks:
   crawler_net:
-    driver: bridge
+    driver: overlay
+    external: true
 
 volumes:
   mysql_data:

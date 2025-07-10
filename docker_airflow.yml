@@ -4,29 +4,30 @@ version: '3.8'
 services:
   # Airflow Webserver
   airflow-webserver:
-    image: apache/airflow:2.8.4
+    image: benitorhuang/airflow-crawler:0.0.1 
     restart: on-failure
     environment:
       AIRFLOW_HOME: /opt/airflow
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres/airflow
       AIRFLOW__WEBSERVER__RBAC: "True"
-      # [調整] DAGs Folder 指向容器內掛載的實際 DAG 文件路徑
-      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags/src/dataflow/dags 
-      _PIP_ADDITIONAL_REQUIREMENTS: "apache-airflow-providers-mysql apache-airflow-providers-cncf-kubernetes"
+      # [修正] DAGS_FOLDER 指向專案安裝後的 dags 目錄
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/project/src/dataflow/dags
+      PYTHONPATH: /opt/airflow/project
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "True" # 建議新 DAG 默認暫停
+      AIRFLOW__CELERY__BROKER_URL: "amqp://${RABBITMQ_DEFAULT_USER:-guest}:${RABBITMQ_DEFAULT_PASS:-guest}@rabbitmq:5672/"
+      AIRFLOW__CELERY__RESULT_BACKEND: "db+mysql+pymysql://${MYSQL_USER:-user}:${MYSQL_PASSWORD:-password}@mysql:3306/${MYSQL_DATABASE:-job_data}"
+      # [最終修正] PYTHONPATH 只需包含 dags 根目錄，以便找到 'etl' 包
+      
     ports:
       - target: 8080
         published: ${AIRFLOW_WEBSERVER_PORT:-8080}
         protocol: tcp
         mode: ingress
     volumes:
-      # [調整] 將本地的 `src` 目錄掛載到容器內的 `/opt/airflow/dags/src`
-      # 這樣 /opt/airflow/dags/src/dataflow/dags 就會包含你的 DAG 文件
-      - ./src:/opt/airflow/dags/src 
+      - ./src:/opt/airflow/project/src
       - ${AIRFLOW_LOGS_FOLDER_HOST:-./logs}:/opt/airflow/logs
       - ./plugins:/opt/airflow/plugins
-      - ./crawler:/app/crawler
-      - ./requirements.txt:/app/requirements.txt
     networks:
       - airflow_internal_net
       - crawler_net
@@ -41,63 +42,23 @@ services:
 
   # Airflow Scheduler
   airflow-scheduler:
-    image: apache/airflow:2.8.4
+    image: benitorhuang/airflow-crawler:0.0.1
     restart: on-failure
     environment:
       AIRFLOW_HOME: /opt/airflow
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres/airflow
-      # [調整] DAGs Folder
-      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags/src/dataflow/dags
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/project/src/dataflow/dags
+      PYTHONPATH: /opt/airflow/project
+      
     volumes:
-      # [調整]
-      - ./src:/opt/airflow/dags/src 
+      - ./src:/opt/airflow/project/src
       - ${AIRFLOW_LOGS_FOLDER_HOST:-./logs}:/opt/airflow/logs
       - ./plugins:/opt/airflow/plugins
-      - ./crawler:/app/crawler
-      - ./requirements.txt:/app/requirements.txt
     networks:
       - airflow_internal_net
       - crawler_net
     command: scheduler
-    healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    deploy:
-      replicas: 1
-
-  # Airflow Worker
-  airflow-worker:
-    image: apache/airflow:2.8.4
-    restart: on-failure
-    environment:
-      AIRFLOW_HOME: /opt/airflow
-      AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres/airflow
-      # [調整] DAGs Folder
-      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags/src/dataflow/dags
-      RABBITMQ_HOST: rabbitmq
-      REDIS_HOST: redis
-      MYSQL_HOST: mysql
-    volumes:
-      # [調整]
-      - ./src:/opt/airflow/dags/src 
-      - ${AIRFLOW_LOGS_FOLDER_HOST:-./logs}:/opt/airflow/logs
-      - ./plugins:/opt/airflow/plugins
-      - ./crawler:/app/crawler
-      - ./requirements.txt:/app/requirements.txt
-    networks:
-      - airflow_internal_net
-      - crawler_net
-    command: >
-      bash -c "pip install --no-cache-dir -r /app/requirements.txt && airflow worker"
-    healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
     deploy:
       replicas: 1
 

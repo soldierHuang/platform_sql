@@ -1,0 +1,29 @@
+# dockerfile.airflow
+
+# 使用一個穩定的 Airflow 官方映像
+FROM apache/airflow:2.8.4
+
+# 安裝構建工具
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential && apt-get clean
+
+# [修改] 將整個專案複製到臨時目錄，並設置正確的所有權
+WORKDIR /opt/airflow
+COPY . /opt/airflow/project
+RUN chown -R airflow:root /opt/airflow/project
+
+# 切換回 airflow 用戶
+USER airflow
+
+# [修改] 安裝 Airflow 依賴和你的專案
+RUN pip install --no-cache-dir -r /opt/airflow/project/requirements-airflow.txt --break-system-packages && pip install /opt/airflow/project --break-system-packages
+RUN pip list
+
+# 清理
+# USER root
+# RUN rm -rf /project
+# USER airflow
+
+# 設置工作目錄
+WORKDIR /opt/airflow
+ENV PYTHONPATH="/opt/airflow/project:${PYTHONPATH}"

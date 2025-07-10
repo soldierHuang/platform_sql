@@ -38,7 +38,7 @@ logs/
 .DS_Store
 Thumbs.db
 GEMINI.md
-
+QA.md
 
 # Directories to ignore as requested by user
 demo/

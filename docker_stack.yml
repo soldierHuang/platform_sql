@@ -180,12 +180,13 @@ services:
     image: phpmyadmin/phpmyadmin
     ports:
       - target: 80
-        published: ${PHPMYADMIN_EXPOSE_PORT:-8080}
+        published: 8081
         protocol: tcp
         mode: ingress
     environment:
       PMA_HOST: mysql
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_password}
+      PHPMYADMIN_EXPOSE_PORT: ${PHPMYADMIN_EXPOSE_PORT:-8081}
     networks:
       - crawler_net
     deploy:
@@ -216,8 +217,9 @@ services:
 
 networks:
   crawler_net:
-    driver: overlay
-    attachable: true
+    external: true
+    # driver: overlay
+    # attachable: true
 
 volumes:
   mysql_data:
