@@ -7,6 +7,7 @@ import logging
 from typing import Any, Optional, List
 
 from crawler.core.orchestrator import CrawlerOrchestrator
+from crawler.core.protocols import CategoryFetcher
 from crawler.enums import SourcePlatform
 from crawler.database import repository
 from crawler.settings import settings
@@ -26,30 +27,35 @@ def _get_platform_settings(platform: SourcePlatform) -> Any:
     return platform_setting_map[platform]
 
 
-def create_crawler(platform: SourcePlatform, category_ids: Optional[List[str]] = None) -> CrawlerOrchestrator:
+def create_crawler(platform: SourcePlatform) -> CrawlerOrchestrator:
     """
     工廠函數：根據平台枚舉，實例化並返回一個配置好的 CrawlerOrchestrator。
     """
     logger.info(f"正在為平台 '{platform.value}' 創建爬蟲實例...")
-    if category_ids:
-        logger.info(f"使用指定的分類 IDs: {category_ids}")
     
     platform_settings = _get_platform_settings(platform)
     
-    categories = repository.get_source_categories(platform, category_ids)
+    categories = repository.get_source_categories(platform)
     logger.info(f"從資料庫讀取到 {len(categories)} 個分類。")
+
+    url_fetcher = None
+    detail_fetcher = None
+    detail_parser = None
+    category_fetcher: Optional[CategoryFetcher] = None
 
     if platform == SourcePlatform.PLATFORM_104:
         from crawler.projects.platform_104 import strategies
         url_fetcher = strategies.ApiUrlFetcher(categories, platform_settings)
         detail_fetcher = strategies.ApiDetailFetcher(platform_settings)
         detail_parser = strategies.ApiDetailParser()
+        category_fetcher = strategies.ApiCategoryFetcher(platform_settings)
 
     elif platform == SourcePlatform.PLATFORM_1111:
         from crawler.projects.platform_1111 import strategies
         url_fetcher = strategies.ApiUrlFetcher(categories, platform_settings)
         detail_fetcher = strategies.HtmlDetailFetcher(platform_settings)
         detail_parser = strategies.HybridDetailParser()
+        category_fetcher = strategies.ApiCategoryFetcher(platform_settings)
 
     elif platform == SourcePlatform.PLATFORM_CAKERESUME:
         # [關鍵修正] Cakeresume 現在使用 HtmlUrlFetcher
@@ -57,12 +63,14 @@ def create_crawler(platform: SourcePlatform, category_ids: Optional[List[str]] =
         url_fetcher = strategies.HtmlUrlFetcher(categories, platform_settings)
         detail_fetcher = strategies.HtmlDetailFetcher(platform_settings)
         detail_parser = strategies.ScriptDetailParser()
+        category_fetcher = strategies.HtmlCategoryFetcher(platform_settings)
 
     elif platform == SourcePlatform.PLATFORM_YES123:
         from crawler.projects.platform_yes123 import strategies
         url_fetcher = strategies.HtmlUrlFetcher(categories, platform_settings)
         detail_fetcher = strategies.HtmlDetailFetcher(platform_settings)
         detail_parser = strategies.HtmlDetailParser()
+        category_fetcher = strategies.HtmlCategoryFetcher(platform_settings)
         
     else:
         raise ValueError(f"Crawler implementation for platform '{platform.value}' not found.")
@@ -73,4 +81,5 @@ def create_crawler(platform: SourcePlatform, category_ids: Optional[List[str]] =
         url_fetcher=url_fetcher,
         detail_fetcher=detail_fetcher,
         detail_parser=detail_parser,
+        category_fetcher=category_fetcher,
     )

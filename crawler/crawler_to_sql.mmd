@@ -1,0 +1,37 @@
+sequenceDiagram
+    participant User
+    participant web_url as  URL 網址 or API
+    participant JobCat as 搜尋類別
+    participant Search as 職缺列表
+    participant Job_detail as 職缺個別資訊
+    participant database as 檔案 / 資料庫
+    
+
+    Note over User: 設定搜尋條件與範圍
+
+    User->>web_url: 網站搜尋
+
+
+    Note over web_url: 1.職業類別清單
+    loop 
+        web_url->>JobCat: 獲取 職業類別 資訊
+        JobCat->>database: 依據類別項目與細項分支、儲存至 tb_category_source
+        Note over JobCat: 職業類別:作為後續搜尋條件 (不定期更新)
+    end
+    
+    
+    Note over Search: 2. 網址清單 
+    loop 每頁職缺 
+        database-->>Search: 提供職缺類別
+        Note over Job_detail: 將[職缺類別]轉換為列表網址 ( 職業類別+最新排序 作為網址參數 ) 
+        Search->>database: 收集單一網頁職缺網址 , 儲存至 tb_urls 
+        
+    end
+
+    
+    Note over Job_detail: 3. 獲取職缺詳細資訊
+    loop 連結每個職缺
+        database-->>Job_detail: 提供職缺網址列表 
+        Job_detail->>database: 收集職缺資料 , 儲存至 tb_jobs
+        Job_detail->>database: 完成資料收集後 , 更新 tb_urls 狀態
+    end

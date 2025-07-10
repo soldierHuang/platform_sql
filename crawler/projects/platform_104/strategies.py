@@ -15,6 +15,20 @@ from . import parsers
 
 logger = logging.getLogger(__name__)
 
+class ApiCategoryFetcher:
+    """策略實現：從 104 API 獲取職務分類數據。"""
+    def __init__(self, settings: Any):
+        self.cfg = settings
+
+    def __call__(self) -> List[Dict[str, Any]]:
+        logger.info("[104] 開始從 API 獲取職務分類。")
+        api_url = "https://static.104.com.tw/category-tool/json/JobCat.json"
+        res = make_request(api_url, headers=self.cfg.headers)
+        json_data = res.json()
+        transformed_data = parsers.transform_categories_to_source_model(json_data)
+        logger.info(f"[104] 成功獲取並轉換 {len(transformed_data)} 個職務分類。")
+        return transformed_data
+
 class ApiUrlFetcher:
     """策略實現：通過 104 的搜索 API 獲取職缺列表。"""
     def __init__(self, categories: List[CategorySource], settings: Any):

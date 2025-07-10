@@ -8,7 +8,9 @@ from typing import Dict, Any, Generator, Optional, List
 import json
 
 from bs4 import BeautifulSoup
-from crawler.core.protocols import UrlFetcher, DetailFetcher, DetailParser
+from crawler.core.protocols import UrlFetcher, DetailFetcher, DetailParser, CategoryFetcher
+from bs4 import BeautifulSoup
+from crawler.database.schema import Job, CategorySource
 from crawler.utils import make_request
 from crawler.database.schema import Job, CategorySource
 from . import parsers

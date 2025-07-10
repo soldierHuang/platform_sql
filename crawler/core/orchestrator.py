@@ -13,7 +13,7 @@ from crawler.database import repository
 from crawler.cache import get_redis_client
 from crawler.settings import settings
 from crawler.utils import run_concurrently
-from .protocols import UrlFetcher, DetailFetcher, DetailParser
+from .protocols import UrlFetcher, DetailFetcher, DetailParser, CategoryFetcher
 
 logger = logging.getLogger(__name__)
 
@@ -27,12 +27,14 @@ class CrawlerOrchestrator:
         url_fetcher: UrlFetcher,
         detail_fetcher: DetailFetcher,
         detail_parser: DetailParser,
+        category_fetcher: Optional[CategoryFetcher] = None,
     ):
         self.platform = platform
         self.cfg = self._get_platform_settings(platform)
         self.url_fetcher = url_fetcher
         self.detail_fetcher = detail_fetcher
         self.detail_parser = detail_parser
+        self.category_fetcher = category_fetcher
         self.redis = get_redis_client()
         logger.info(f"[{self.platform.value}] CrawlerOrchestrator initialized.")
 
@@ -159,3 +161,21 @@ class CrawlerOrchestrator:
             repository.mark_urls_as_crawled(url_status_map)
         
         logger.info(f"[{self.platform.value}] Details pipeline finished.")
+
+    def run_category_pipeline(self) -> None:
+        """
+        執行分類抓取 pipeline。
+        調用 CategoryFetcher 獲取原始分類數據，並同步到資料庫。
+        """
+        if not self.category_fetcher:
+            logger.warning(f"[{self.platform.value}] 未提供 CategoryFetcher，跳過分類抓取。")
+            return
+
+        try:
+            logger.info(f"[{self.platform.value}] 開始執行分類抓取 pipeline...")
+            transformed_data = self.category_fetcher()
+            result = repository.sync_source_categories(self.platform, transformed_data)
+            logger.info(f"[{self.platform.value}] 分類 pipeline 成功完成。同步結果: {result}")
+        except Exception as e:
+            logger.error(f"[{self.platform.value}] 分類 pipeline 失敗: {e}", exc_info=True)
+            raise

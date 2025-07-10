@@ -42,3 +42,13 @@ class DetailParser(Protocol):
     """
     def __call__(self, raw_content: str, url: str, intermediate_data: Optional[Dict[str, Any]]) -> Optional[Job]:
         ...
+
+class CategoryFetcher(Protocol):
+    """
+    策略接口：定義如何獲取一個平台的職務分類資料。
+
+    實現此協議的類必須提供一個 __call__ 方法，該方法負責從 API 或其他來源
+    獲取原始的職務分類數據，並以適合後續處理的格式返回。
+    """
+    def __call__(self) -> Any:
+        ...
